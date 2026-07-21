@@ -1,13 +1,7 @@
 import { z } from "zod";
+import { CAMPAIGN_CATEGORIES } from "@/types";
 
-export const CAMPAIGN_CATEGORIES = [
-  "technology",
-  "art",
-  "education",
-  "health",
-  "community",
-  "environment",
-] as const;
+export { CAMPAIGN_CATEGORIES };
 
 // creator, status, and amount_raised are never accepted from the body:
 // creator comes from the verified JWT, the rest is server-managed state.
@@ -35,5 +29,14 @@ export const updateCampaignSchema = z
     "At least one field is required"
   );
 
+// Query-param filters for the public list. Coerced because query params
+// arrive as strings; not strict because pagination shares the query string.
+export const listCampaignsQuerySchema = z.object({
+  category: z.enum(CAMPAIGN_CATEGORIES).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(12),
+});
+
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export type UpdateCampaignInput = z.infer<typeof updateCampaignSchema>;
+export type ListCampaignsQuery = z.infer<typeof listCampaignsQuerySchema>;
