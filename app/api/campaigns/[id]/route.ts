@@ -10,14 +10,22 @@ import { parseObjectId } from "@/lib/validators/common";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET — any authenticated role: campaign detail page.
+// GET — any authenticated role: campaign detail page. Non-approved
+// campaigns are visible only to their creator and admins; everyone else
+// gets a 404 (not a 403, so existence isn't leaked).
 export const GET = withAuthErrors<Ctx>(async (req, { params }) => {
-  await verifyRequest(req);
+  const user = await verifyRequest(req);
   const id = parseObjectId((await params).id);
   await connectDb();
 
   const campaign = await Campaign.findById(id).lean();
   if (!campaign) throw new ApiError(404, "Campaign not found");
+
+  const canSeeNonApproved =
+    user.role === "admin" || campaign.creatorEmail === user.email;
+  if (campaign.status !== "approved" && !canSeeNonApproved) {
+    throw new ApiError(404, "Campaign not found");
+  }
 
   return Response.json({ campaign });
 });
