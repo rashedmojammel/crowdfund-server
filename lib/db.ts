@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { type ClientSession } from "mongoose";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -35,4 +35,22 @@ export async function connectDb(): Promise<typeof mongoose> {
     throw err;
   }
   return cache.conn;
+}
+
+// Runs fn inside a Mongoose transaction. Every credit-moving operation goes
+// through this so a mid-operation failure rolls back all writes together.
+export async function runInTransaction<T>(
+  fn: (session: ClientSession) => Promise<T>
+): Promise<T> {
+  const conn = await connectDb();
+  const session = await conn.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async () => {
+      result = await fn(session);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
 }
