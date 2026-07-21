@@ -10,6 +10,9 @@ const contributionSchema = new Schema(
       index: true,
     },
     supporterEmail: { type: String, required: true, index: true },
+    // Denormalized from the user document at creation (JWT + DB lookup,
+    // never the request body) so review tables don't need a join.
+    supporterName: { type: String, required: true },
     amount: { type: Number, required: true, min: 1 },
     status: {
       type: String,
