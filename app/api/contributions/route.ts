@@ -4,10 +4,11 @@ import { deductCredits } from "@/lib/credits";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
-import { Contribution } from "@/lib/models/Contribution";
+import { Contribution, type ContributionDoc } from "@/lib/models/Contribution";
 import { User } from "@/lib/models/User";
 import { getCreatorCampaignIds } from "@/lib/campaigns";
 import { createNotification } from "@/lib/notifications";
+import { paginate } from "@/lib/pagination";
 import {
   createContributionSchema,
   listContributionsQuerySchema,
@@ -22,15 +23,13 @@ export const GET = withAuthErrors(async (req) => {
   await connectDb();
 
   if (query.mine) {
-    const filter = { supporterEmail: user.email };
-    const [items, total] = await Promise.all([
-      Contribution.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .lean(),
-      Contribution.countDocuments(filter),
-    ]);
+    const { items, total } = await paginate<ContributionDoc>(
+      Contribution,
+      { supporterEmail: user.email },
+      { createdAt: -1 },
+      query.page,
+      query.limit
+    );
     return Response.json({
       items,
       total,
