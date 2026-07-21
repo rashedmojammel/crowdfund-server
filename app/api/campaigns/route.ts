@@ -1,7 +1,8 @@
 import { requireCreator, withAuthErrors } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
 import { readJsonBody } from "@/lib/http";
-import { Campaign } from "@/lib/models/Campaign";
+import { Campaign, type CampaignDoc } from "@/lib/models/Campaign";
+import { paginate } from "@/lib/pagination";
 import {
   createCampaignSchema,
   listCampaignsQuerySchema,
@@ -21,16 +22,15 @@ export const GET = withAuthErrors(async (req) => {
     ...(category && { category }),
   };
 
-  const [campaigns, total] = await Promise.all([
-    Campaign.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean(),
-    Campaign.countDocuments(filter),
-  ]);
+  const { items, total } = await paginate<CampaignDoc>(
+    Campaign,
+    filter,
+    { createdAt: -1 },
+    page,
+    limit
+  );
 
-  return Response.json({ campaigns, total, page, limit });
+  return Response.json({ campaigns: items, total, page, limit });
 });
 
 // POST — creator submits a new campaign. creatorEmail comes from the JWT,
