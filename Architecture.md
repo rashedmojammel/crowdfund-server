@@ -266,8 +266,9 @@ crowdfund-server/
 │       ├── withdrawals/
 │       │   ├── ✅ route.ts                # POST  — creator requests (min 200 credits)
 │       │   │                              # GET   — ?mine=true or admin pending list
-│       │   └── 🔨 [id]/
-│       │       └── approve/route.ts       # PATCH — admin marks paid, decreases raised credits
+│       │   └── ✅ [id]/
+│       │       └── approve/route.ts       # PATCH — admin marks paid (no separate wallet field;
+│       │                                  # raised credits are always derived, never decremented)
 │       │
 │       ├── payments/
 │       │   ├── ✅ route.ts                # POST  — creates Stripe Checkout Session
