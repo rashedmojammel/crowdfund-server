@@ -24,6 +24,17 @@ export const CAMPAIGN_STATUSES = [
 ] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
+// Admin status transitions: target status → statuses it may come from.
+// Same-status calls are idempotent no-ops; anything else is a 409.
+export const CAMPAIGN_STATUS_TRANSITIONS: Record<
+  "approved" | "rejected" | "suspended",
+  readonly CampaignStatus[]
+> = {
+  approved: ["pending", "suspended"],
+  rejected: ["pending"],
+  suspended: ["approved"],
+};
+
 export const CONTRIBUTION_STATUSES = [
   "pending",
   "approved",
