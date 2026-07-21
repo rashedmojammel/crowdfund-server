@@ -54,6 +54,31 @@ export async function setCampaignStatus(
   });
 }
 
+// Guards for POST /api/contributions: campaign must exist, be approved,
+// be inside its deadline, and the amount must meet its minimum. Returns
+// the campaign so the caller doesn't query twice.
+export async function getContributableCampaign(
+  id: string,
+  amount: number,
+  session?: import("mongoose").ClientSession
+) {
+  const campaign = await Campaign.findById(id).session(session ?? null);
+  if (!campaign) throw new ApiError(404, "Campaign not found");
+  if (campaign.status !== "approved") {
+    throw new ApiError(409, "Campaign is not open for contributions");
+  }
+  if (campaign.deadline.getTime() < Date.now()) {
+    throw new ApiError(409, "Campaign deadline has passed");
+  }
+  if (amount < campaign.minimumContribution) {
+    throw new ApiError(
+      400,
+      `Minimum contribution for this campaign is ${campaign.minimumContribution} credits`
+    );
+  }
+  return campaign;
+}
+
 type Ctx = { params: Promise<{ id: string }> };
 
 // The approve / reject / suspend routes differ only in target status and
