@@ -24,6 +24,7 @@ const withdrawalSchema = new Schema(
 );
 
 withdrawalSchema.index({ creatorEmail: 1, createdAt: -1 });
+withdrawalSchema.index({ status: 1, createdAt: 1 });
 
 export type WithdrawalDoc = InferSchemaType<typeof withdrawalSchema>;
 
