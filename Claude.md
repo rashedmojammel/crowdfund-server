@@ -20,6 +20,7 @@ Every route handler must follow these. No exceptions.
 - Wrap every route handler in `withAuthErrors` from `lib/auth.ts`.
 - Identity ALWAYS comes from the verified JWT (`verifyRequest` / `requireSupporter` / `requireCreator` / `requireAdmin`). Never read the acting user's id, email, or role from a request body or query param.
 - Role gates are allow-lists: a route without an explicit role guard must still call `verifyRequest` unless it is deliberately public (health, public campaign list).
+- Ownership checks: PATCH/DELETE on owned resources put the JWT identity in the query filter (e.g. `{ _id, creatorEmail: jwt.email }`) so check and mutation are atomic. Admins may bypass ownership, but never role gates.
 
 ### Validation
 - Every write endpoint parses its body with the matching Zod schema from `lib/validators/` before touching the database. Closed shapes use `z.strictObject`.
@@ -30,6 +31,7 @@ Every route handler must follow these. No exceptions.
 - Every operation that moves credits runs inside a Mongoose transaction (`session.withTransaction`): contribution create/approve/reject, campaign delete (refunds), withdrawal approval, webhook wallet credit, signup bonus.
 - Credit mutations go through `lib/credits.ts` helpers only — `$inc` with guarded filters, never read-modify-write.
 - Insufficient balance is a 409. Missing user is a 404.
+- Campaign deletion refund flow (one transaction): refund every approved contribution, mark those contributions "rejected" as an audit trail (never delete them), delete the campaign, notify each refunded supporter — and the creator too when an admin did the deleting.
 
 ### Response shapes
 - Success responses use named keys, never bare arrays or scalars: `{ campaigns: [...] }`, `{ user: {...} }`, `{ granted: true, credits: 120 }`.
