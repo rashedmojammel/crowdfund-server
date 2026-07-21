@@ -1,3 +1,4 @@
+import type { ClientSession } from "mongoose";
 import { requireAdmin, withAuthErrors, type AuthUser } from "@/lib/auth";
 import { refundApprovedContributions } from "@/lib/contributions";
 import { connectDb, runInTransaction } from "@/lib/db";
@@ -60,18 +61,32 @@ export interface DeleteCampaignResult {
   refundedCredits: number;
 }
 
+export interface DeleteCampaignOptions {
+  // Join an already-open transaction instead of starting a new one — used
+  // when a campaign delete is one step of a larger atomic operation (e.g.
+  // cascading from a user-account delete).
+  session?: ClientSession;
+  // Suppress the "your campaign was removed" notification — pointless when
+  // the campaign's own creator account is being deleted in the same
+  // transaction.
+  notifyCreator?: boolean;
+}
+
 // Deletes a campaign: refunds every approved contribution, marks those
 // contributions "rejected" as an audit trail (never deleted), deletes the
 // campaign, and notifies affected users — all in one transaction. Shared by
-// DELETE /api/campaigns/[id] (creator or admin) and the reports
-// delete_campaign action (admin only, via requireAdmin upstream).
+// DELETE /api/campaigns/[id] (creator or admin), the reports delete_campaign
+// action, and the user-account cascade delete (admin only in both cases,
+// via requireAdmin upstream).
 export async function deleteCampaignWithRefunds(
   id: string,
-  actor: AuthUser
+  actor: AuthUser,
+  options: DeleteCampaignOptions = {}
 ): Promise<DeleteCampaignResult> {
+  const { session: externalSession, notifyCreator = true } = options;
   await connectDb();
 
-  const campaign = await Campaign.findById(id).lean();
+  const campaign = await Campaign.findById(id).session(externalSession ?? null);
   if (!campaign) throw new ApiError(404, "Campaign not found");
 
   if (actor.role !== "creator" && actor.role !== "admin") {
@@ -81,7 +96,7 @@ export async function deleteCampaignWithRefunds(
     throw new ApiError(403, "You can only delete your own campaigns");
   }
 
-  return runInTransaction(async (session) => {
+  const run = async (session: ClientSession): Promise<DeleteCampaignResult> => {
     const result = await refundApprovedContributions(
       id,
       campaign.title,
@@ -91,7 +106,11 @@ export async function deleteCampaignWithRefunds(
 
     // An admin deleting someone else's campaign is a state change affecting
     // the creator — notify them, inside the same transaction.
-    if (actor.role === "admin" && campaign.creatorEmail !== actor.email) {
+    if (
+      notifyCreator &&
+      actor.role === "admin" &&
+      campaign.creatorEmail !== actor.email
+    ) {
       await createNotification({
         toEmail: campaign.creatorEmail,
         message: `Your campaign "${campaign.title}" was removed by an admin.`,
@@ -100,12 +119,14 @@ export async function deleteCampaignWithRefunds(
       });
     }
     return result;
-  });
+  };
+
+  return externalSession ? run(externalSession) : runInTransaction(run);
 }
 
 export async function getCreatorCampaignIds(
   creatorEmail: string,
-  session?: import("mongoose").ClientSession
+  session?: ClientSession
 ) {
   return Campaign.find({ creatorEmail })
     .session(session ?? null)
@@ -118,7 +139,7 @@ export async function getCreatorCampaignIds(
 export async function getContributableCampaign(
   id: string,
   amount: number,
-  session?: import("mongoose").ClientSession
+  session?: ClientSession
 ) {
   const campaign = await Campaign.findById(id).session(session ?? null);
   if (!campaign) throw new ApiError(404, "Campaign not found");
