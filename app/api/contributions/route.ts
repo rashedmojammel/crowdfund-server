@@ -4,6 +4,7 @@ import { deductCredits } from "@/lib/credits";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
+import { Campaign } from "@/lib/models/Campaign";
 import { Contribution } from "@/lib/models/Contribution";
 import { User } from "@/lib/models/User";
 import { createNotification } from "@/lib/notifications";
@@ -36,6 +37,24 @@ export const GET = withAuthErrors(async (req) => {
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  // ?forCreator=true — contributions to the creator's OWN campaigns. The
+  // campaign scope comes from the JWT email; there is no way to pass a
+  // creator email in.
+  if (query.forCreator) {
+    if (user.role !== "creator") {
+      throw new ApiError(403, "Forbidden for your role");
+    }
+    const campaignIds = await Campaign.find({
+      creatorEmail: user.email,
+    }).distinct("_id");
+    const items = await Contribution.find({
+      campaignId: { $in: campaignIds },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    return Response.json({ items });
   }
 
   throw new ApiError(400, "Specify ?mine=true or ?forCreator=true");
