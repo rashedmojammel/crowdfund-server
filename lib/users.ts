@@ -2,7 +2,9 @@ import type { AuthUser } from "@/lib/auth";
 import { deleteCampaignWithRefunds, getCreatorCampaignIds } from "@/lib/campaigns";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
-import { User } from "@/lib/models/User";
+import { User, type UserDoc } from "@/lib/models/User";
+import { createNotification } from "@/lib/notifications";
+import type { UserRole } from "@/types";
 
 // Admin deletes a user account. If the user is a creator, every one of
 // their campaigns is deleted with refunds first (same session, no creator
@@ -32,5 +34,34 @@ export async function deleteUserAccount(
     }
 
     await User.deleteOne({ _id: targetId }, { session });
+  });
+}
+
+// Admin changes a user's role via the dropdown. Self-demotion is blocked at
+// the route (an admin can't demote their own account and lock themselves
+// out); this helper just does the write and notifies the affected user,
+// atomically.
+export async function updateUserRole(
+  targetId: string,
+  role: UserRole
+): Promise<UserDoc> {
+  await connectDb();
+
+  return runInTransaction(async (session) => {
+    const user = await User.findByIdAndUpdate(
+      targetId,
+      { $set: { role } },
+      { new: true, session }
+    );
+    if (!user) throw new ApiError(404, "User not found");
+
+    await createNotification({
+      toEmail: user.email,
+      message: `Your role has been updated to ${role} by an administrator.`,
+      actionRoute: "/dashboard",
+      session,
+    });
+
+    return user.toObject();
   });
 }
