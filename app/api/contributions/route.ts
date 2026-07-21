@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
 import { Contribution } from "@/lib/models/Contribution";
 import { User } from "@/lib/models/User";
+import { createNotification } from "@/lib/notifications";
 import { createContributionSchema } from "@/lib/validators/contribution";
 
 // POST — supporter contributes credits to an approved, in-deadline
@@ -24,7 +25,7 @@ export const POST = withAuthErrors(async (req) => {
   if (!supporter) throw new ApiError(404, "User not found");
 
   const contribution = await runInTransaction(async (session) => {
-    await getContributableCampaign(campaignId, amount, session);
+    const campaign = await getContributableCampaign(campaignId, amount, session);
     await deductCredits(email, amount, session);
 
     const [created] = await Contribution.create(
@@ -39,6 +40,15 @@ export const POST = withAuthErrors(async (req) => {
       ],
       { session }
     );
+
+    // A new contribution changes the creator's world — notify them in the
+    // same transaction as the deduction.
+    await createNotification({
+      toEmail: campaign.creatorEmail,
+      message: `${supporter.name ?? email} contributed ${amount} credits to "${campaign.title}" — review it now.`,
+      actionRoute: "/dashboard",
+      session,
+    });
     return created;
   });
 
