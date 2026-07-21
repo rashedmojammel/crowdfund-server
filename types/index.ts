@@ -42,7 +42,7 @@ export const CONTRIBUTION_STATUSES = [
 ] as const;
 export type ContributionStatus = (typeof CONTRIBUTION_STATUSES)[number];
 
-export const WITHDRAWAL_STATUSES = ["pending", "paid"] as const;
+export const WITHDRAWAL_STATUSES = ["pending", "approved"] as const;
 export type WithdrawalStatus = (typeof WITHDRAWAL_STATUSES)[number];
 
 export const PAYMENT_SYSTEMS = ["bkash", "nagad", "rocket", "bank"] as const;

@@ -4,7 +4,7 @@ import { Contribution } from "@/lib/models/Contribution";
 import { Withdrawal } from "@/lib/models/Withdrawal";
 
 // Available = sum of approved contributions to this creator's campaigns
-// minus sum of credits already tied up in pending or paid withdrawals.
+// minus sum of credits already tied up in pending or approved withdrawals.
 // Run inside the same transaction as the write that consumes this number,
 // so a concurrent request can't double-book the same credits.
 export async function getAvailableWithdrawalCredits(
@@ -19,7 +19,7 @@ export async function getAvailableWithdrawalCredits(
   ]).session(session ?? null);
 
   const [withdrawnAgg] = await Withdrawal.aggregate([
-    { $match: { creatorEmail, status: { $in: ["pending", "paid"] } } },
+    { $match: { creatorEmail, status: { $in: ["pending", "approved"] } } },
     { $group: { _id: null, total: { $sum: "$credits" } } },
   ]).session(session ?? null);
 

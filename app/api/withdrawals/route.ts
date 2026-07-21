@@ -58,7 +58,7 @@ export const GET = withAuthErrors(async (req) => {
 
 // POST — creator requests a withdrawal. creatorEmail comes from the JWT,
 // never the body. The availability check (approved contributions minus
-// prior pending/paid withdrawals) and the insert run in one transaction,
+// prior pending/approved withdrawals) and the insert run in one transaction,
 // so two concurrent requests can't both book the same credits.
 export const POST = withAuthErrors(async (req) => {
   const { email } = await requireCreator(req);
