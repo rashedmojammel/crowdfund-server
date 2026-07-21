@@ -11,6 +11,7 @@ const notificationSchema = new Schema(
 );
 
 notificationSchema.index({ toEmail: 1, createdAt: -1 });
+notificationSchema.index({ toEmail: 1, read: 1 });
 
 export type NotificationDoc = InferSchemaType<typeof notificationSchema>;
 
