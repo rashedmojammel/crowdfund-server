@@ -34,6 +34,7 @@ Every route handler must follow these. No exceptions.
 - Campaign deletion refund flow (one transaction): refund every approved contribution, mark those contributions "rejected" as an audit trail (never delete them), delete the campaign, notify each refunded supporter — and the creator too when an admin did the deleting.
 - Contributions: only to approved, in-deadline campaigns, amount ≥ the campaign's `minimumContribution` (guard: `getContributableCampaign`). supporterEmail from JWT, supporterName from the DB user doc. Deduct + create + creator notification are one transaction; status starts "pending".
 - Contribution review (creator, own campaigns only, via `reviewContribution`): approve = status → approved + `$inc` campaign.amountRaised + notify supporter; reject = status → rejected + refund + notify supporter. Only pending contributions can be reviewed — same-decision replays are no-ops, other statuses are 409. One transaction each.
+- Withdrawals: `credits` >= 200, available = sum of approved contributions to the creator's campaigns minus sum of pending+paid withdrawal credits (`getAvailableWithdrawalCredits`) — reject if requested credits exceed that. USD `amount` is always computed server-side as `credits / 20`, never trusted from the body. `creatorEmail` from JWT. Availability check + insert run in one transaction so concurrent requests can't double-book the same credits.
 
 ### Response shapes
 - Success responses use named keys, never bare arrays or scalars: `{ campaigns: [...] }`, `{ user: {...} }`, `{ granted: true, credits: 120 }`.
