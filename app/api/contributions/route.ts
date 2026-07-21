@@ -1,4 +1,4 @@
-import { requireSupporter, withAuthErrors } from "@/lib/auth";
+import { requireSupporter, verifyRequest, withAuthErrors } from "@/lib/auth";
 import { getContributableCampaign } from "@/lib/campaigns";
 import { deductCredits } from "@/lib/credits";
 import { connectDb, runInTransaction } from "@/lib/db";
@@ -7,7 +7,39 @@ import { readJsonBody } from "@/lib/http";
 import { Contribution } from "@/lib/models/Contribution";
 import { User } from "@/lib/models/User";
 import { createNotification } from "@/lib/notifications";
-import { createContributionSchema } from "@/lib/validators/contribution";
+import {
+  createContributionSchema,
+  listContributionsQuerySchema,
+} from "@/lib/validators/contribution";
+
+// GET — ?mine=true: own contributions, paginated. Scoped to the JWT email.
+export const GET = withAuthErrors(async (req) => {
+  const user = await verifyRequest(req);
+  const query = listContributionsQuerySchema.parse(
+    Object.fromEntries(new URL(req.url).searchParams)
+  );
+  await connectDb();
+
+  if (query.mine) {
+    const filter = { supporterEmail: user.email };
+    const [items, total] = await Promise.all([
+      Contribution.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .lean(),
+      Contribution.countDocuments(filter),
+    ]);
+    return Response.json({
+      items,
+      total,
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  throw new ApiError(400, "Specify ?mine=true or ?forCreator=true");
+});
 
 // POST — supporter contributes credits to an approved, in-deadline
 // campaign. supporterEmail comes from the JWT, supporterName from the DB
