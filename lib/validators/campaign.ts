@@ -11,6 +11,7 @@ export const createCampaignSchema = z.strictObject({
   category: z.enum(CAMPAIGN_CATEGORIES),
   coverImage: z.url(),
   fundingGoal: z.number().int().positive(),
+  minimumContribution: z.number().int().min(1).default(1),
   deadline: z.coerce
     .date()
     .refine((d) => d.getTime() > Date.now(), "Deadline must be in the future"),

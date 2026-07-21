@@ -8,6 +8,7 @@ const campaignSchema = new Schema(
     category: { type: String, enum: CAMPAIGN_CATEGORIES, required: true },
     coverImage: { type: String, required: true },
     fundingGoal: { type: Number, required: true, min: 1 },
+    minimumContribution: { type: Number, default: 1, min: 1 },
     // Mutated only via $inc inside transactions (contribution approve,
     // withdrawal payout) — never set from a request body.
     amountRaised: { type: Number, default: 0, min: 0 },
