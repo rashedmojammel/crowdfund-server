@@ -52,3 +52,13 @@ export type PaymentSystem = (typeof PAYMENT_SYSTEMS)[number];
 export const CREDITS_PER_USD_BUY = 10;
 export const CREDITS_PER_USD_WITHDRAW = 20;
 export const MIN_WITHDRAWAL_CREDITS = 200;
+
+// The only four purchasable packages. POST /api/payments rejects any
+// {credits, amountUsd} pair that doesn't exactly match one of these —
+// larger packages carry a bulk discount over the base 10-credits-per-$1 rate.
+export const CREDIT_PACKAGES = [
+  { credits: 100, amountUsd: 10 },
+  { credits: 300, amountUsd: 25 },
+  { credits: 800, amountUsd: 60 },
+  { credits: 1500, amountUsd: 110 },
+] as const;
