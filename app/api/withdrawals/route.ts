@@ -2,7 +2,8 @@ import { requireCreator, verifyRequest, withAuthErrors } from "@/lib/auth";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
-import { Withdrawal } from "@/lib/models/Withdrawal";
+import { Withdrawal, type WithdrawalDoc } from "@/lib/models/Withdrawal";
+import { paginate } from "@/lib/pagination";
 import {
   createWithdrawalSchema,
   listWithdrawalsQuerySchema,
@@ -23,15 +24,13 @@ export const GET = withAuthErrors(async (req) => {
     if (user.role !== "creator") {
       throw new ApiError(403, "Forbidden for your role");
     }
-    const filter = { creatorEmail: user.email };
-    const [items, total] = await Promise.all([
-      Withdrawal.find(filter)
-        .sort({ createdAt: -1 })
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .lean(),
-      Withdrawal.countDocuments(filter),
-    ]);
+    const { items, total } = await paginate<WithdrawalDoc>(
+      Withdrawal,
+      { creatorEmail: user.email },
+      { createdAt: -1 },
+      query.page,
+      query.limit
+    );
     return Response.json({
       items,
       total,
@@ -44,15 +43,13 @@ export const GET = withAuthErrors(async (req) => {
   if (user.role !== "admin") {
     throw new ApiError(403, "Forbidden for your role");
   }
-  const filter = { status: "pending" as const };
-  const [items, total] = await Promise.all([
-    Withdrawal.find(filter)
-      .sort({ createdAt: 1 })
-      .skip((query.page - 1) * query.limit)
-      .limit(query.limit)
-      .lean(),
-    Withdrawal.countDocuments(filter),
-  ]);
+  const { items, total } = await paginate<WithdrawalDoc>(
+    Withdrawal,
+    { status: "pending" },
+    { createdAt: 1 },
+    query.page,
+    query.limit
+  );
   return Response.json({ items, total, page: query.page, limit: query.limit });
 });
 
