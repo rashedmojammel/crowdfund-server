@@ -32,11 +32,12 @@ Every route handler must follow these. No exceptions.
 - Credit mutations go through `lib/credits.ts` helpers only — `$inc` with guarded filters, never read-modify-write.
 - Insufficient balance is a 409. Missing user is a 404.
 - Campaign deletion refund flow (one transaction): refund every approved contribution, mark those contributions "rejected" as an audit trail (never delete them), delete the campaign, notify each refunded supporter — and the creator too when an admin did the deleting.
+- Contributions: only to approved, in-deadline campaigns, amount ≥ the campaign's `minimumContribution` (guard: `getContributableCampaign`). supporterEmail from JWT, supporterName from the DB user doc. Deduct + create + creator notification are one transaction; status starts "pending".
 
 ### Response shapes
 - Success responses use named keys, never bare arrays or scalars: `{ campaigns: [...] }`, `{ user: {...} }`, `{ granted: true, credits: 120 }`.
 - Error responses are `{ message: string }` with the correct status (400 validation, 401 unauthenticated, 403 wrong role, 404 missing, 409 conflict). `withAuthErrors` produces these from thrown `ApiError` / `ZodError`.
-- Paginated lists return `{ items: [...], total, page, limit }` (rename `items` to the resource name).
+- Paginated lists return exactly `{ items: [...], total, page, limit }`.
 
 ### Notifications
 - Every state change that affects another user calls `createNotification()` from `lib/notifications.ts` — contribution approved/rejected, campaign approved/rejected/suspended, withdrawal paid, bonus granted.
