@@ -42,6 +42,10 @@ Every route handler must follow these. No exceptions.
 - Every state change that affects another user calls `createNotification()` from `lib/notifications.ts` — contribution approved/rejected, campaign approved/rejected/suspended, withdrawal paid, bonus granted.
 - When the state change runs in a transaction, pass the session so the notification commits or rolls back with it.
 
+### Status transitions
+- Admin campaign status routes (approve/reject/suspend) go through `makeCampaignStatusRoute` in `lib/campaigns.ts` — idempotent (same-status calls are no-ops that do NOT re-notify), transition-checked via `CAMPAIGN_STATUS_TRANSITIONS` (invalid source status is a 409), and transactional with the creator notification.
+- Non-approved campaigns are visible only to their creator and admins. Everyone else gets a 404, never a 403 — don't leak existence.
+
 ### Misc
 - Idempotency: Stripe webhook credits are keyed by `session_id`; signup bonus by `signupBonusGranted`. Replays must be no-ops.
 - CORS: only origins in `ALLOWED_ORIGINS`. Preflight handled in `middleware.ts`.
