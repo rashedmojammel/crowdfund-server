@@ -1,6 +1,6 @@
 import { requireCreator, withAuthErrors } from "@/lib/auth";
 import { connectDb } from "@/lib/db";
-import { ApiError } from "@/lib/errors";
+import { readJsonBody } from "@/lib/http";
 import { Campaign } from "@/lib/models/Campaign";
 import {
   createCampaignSchema,
@@ -38,10 +38,7 @@ export const GET = withAuthErrors(async (req) => {
 // schema rejects any attempt to send them.
 export const POST = withAuthErrors(async (req) => {
   const { email } = await requireCreator(req);
-  const raw = await req.json().catch(() => {
-    throw new ApiError(400, "Invalid JSON body");
-  });
-  const input = createCampaignSchema.parse(raw);
+  const input = createCampaignSchema.parse(await readJsonBody(req));
   await connectDb();
 
   const campaign = await Campaign.create({
