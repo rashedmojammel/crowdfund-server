@@ -40,7 +40,20 @@ export const GET = withAuthErrors(async (req) => {
     });
   }
 
-  throw new ApiError(400, "Only ?mine=true is supported for this role");
+  // Default (no ?mine) — admin-only pending queue for the payout dashboard.
+  if (user.role !== "admin") {
+    throw new ApiError(403, "Forbidden for your role");
+  }
+  const filter = { status: "pending" as const };
+  const [items, total] = await Promise.all([
+    Withdrawal.find(filter)
+      .sort({ createdAt: 1 })
+      .skip((query.page - 1) * query.limit)
+      .limit(query.limit)
+      .lean(),
+    Withdrawal.countDocuments(filter),
+  ]);
+  return Response.json({ items, total, page: query.page, limit: query.limit });
 });
 
 // POST — creator requests a withdrawal. creatorEmail comes from the JWT,
