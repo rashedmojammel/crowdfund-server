@@ -1,10 +1,9 @@
 import { requireCreator, verifyRequest, withAuthErrors } from "@/lib/auth";
-import { refundApprovedContributions } from "@/lib/contributions";
-import { connectDb, runInTransaction } from "@/lib/db";
+import { deleteCampaignWithRefunds } from "@/lib/campaigns";
+import { connectDb } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
 import { Campaign } from "@/lib/models/Campaign";
-import { createNotification } from "@/lib/notifications";
 import { updateCampaignSchema } from "@/lib/validators/campaign";
 import { parseObjectId } from "@/lib/validators/common";
 
@@ -57,41 +56,13 @@ export const PATCH = withAuthErrors<Ctx>(async (req, { params }) => {
 
 // DELETE — the campaign's creator or an admin. Refunds, audit-trail status
 // updates, the delete itself, and all notifications commit or roll back as
-// one transaction.
+// one transaction (see deleteCampaignWithRefunds, shared with the reports
+// delete_campaign action).
 export const DELETE = withAuthErrors<Ctx>(async (req, { params }) => {
   const user = await verifyRequest(req);
-  if (user.role !== "creator" && user.role !== "admin") {
-    throw new ApiError(403, "Forbidden for your role");
-  }
   const id = parseObjectId((await params).id);
-  await connectDb();
 
-  const campaign = await Campaign.findById(id).lean();
-  if (!campaign) throw new ApiError(404, "Campaign not found");
-  if (user.role === "creator" && campaign.creatorEmail !== user.email) {
-    throw new ApiError(403, "You can only delete your own campaigns");
-  }
-
-  const refunds = await runInTransaction(async (session) => {
-    const result = await refundApprovedContributions(
-      id,
-      campaign.title,
-      session
-    );
-    await Campaign.deleteOne({ _id: id }, { session });
-
-    // An admin deleting someone else's campaign is a state change affecting
-    // the creator — notify them, inside the same transaction.
-    if (user.role === "admin" && campaign.creatorEmail !== user.email) {
-      await createNotification({
-        toEmail: campaign.creatorEmail,
-        message: `Your campaign "${campaign.title}" was removed by an admin.`,
-        actionRoute: "/dashboard/my-campaigns",
-        session,
-      });
-    }
-    return result;
-  });
+  const refunds = await deleteCampaignWithRefunds(id, user);
 
   return Response.json({ deleted: true, ...refunds });
 });

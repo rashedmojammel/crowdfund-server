@@ -1,4 +1,5 @@
-import { requireAdmin, withAuthErrors } from "@/lib/auth";
+import { requireAdmin, withAuthErrors, type AuthUser } from "@/lib/auth";
+import { refundApprovedContributions } from "@/lib/contributions";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { Campaign, type CampaignDoc } from "@/lib/models/Campaign";
@@ -51,6 +52,54 @@ export async function setCampaignStatus(
     });
 
     return { campaign: campaign.toObject(), changed: true };
+  });
+}
+
+export interface DeleteCampaignResult {
+  refundedContributions: number;
+  refundedCredits: number;
+}
+
+// Deletes a campaign: refunds every approved contribution, marks those
+// contributions "rejected" as an audit trail (never deleted), deletes the
+// campaign, and notifies affected users — all in one transaction. Shared by
+// DELETE /api/campaigns/[id] (creator or admin) and the reports
+// delete_campaign action (admin only, via requireAdmin upstream).
+export async function deleteCampaignWithRefunds(
+  id: string,
+  actor: AuthUser
+): Promise<DeleteCampaignResult> {
+  await connectDb();
+
+  const campaign = await Campaign.findById(id).lean();
+  if (!campaign) throw new ApiError(404, "Campaign not found");
+
+  if (actor.role !== "creator" && actor.role !== "admin") {
+    throw new ApiError(403, "Forbidden for your role");
+  }
+  if (actor.role === "creator" && campaign.creatorEmail !== actor.email) {
+    throw new ApiError(403, "You can only delete your own campaigns");
+  }
+
+  return runInTransaction(async (session) => {
+    const result = await refundApprovedContributions(
+      id,
+      campaign.title,
+      session
+    );
+    await Campaign.deleteOne({ _id: id }, { session });
+
+    // An admin deleting someone else's campaign is a state change affecting
+    // the creator — notify them, inside the same transaction.
+    if (actor.role === "admin" && campaign.creatorEmail !== actor.email) {
+      await createNotification({
+        toEmail: campaign.creatorEmail,
+        message: `Your campaign "${campaign.title}" was removed by an admin.`,
+        actionRoute: "/dashboard/my-campaigns",
+        session,
+      });
+    }
+    return result;
   });
 }
 
