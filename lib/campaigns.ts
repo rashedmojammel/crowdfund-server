@@ -1,7 +1,9 @@
+import { requireAdmin, withAuthErrors } from "@/lib/auth";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { Campaign, type CampaignDoc } from "@/lib/models/Campaign";
 import { createNotification } from "@/lib/notifications";
+import { parseObjectId } from "@/lib/validators/common";
 import { CAMPAIGN_STATUS_TRANSITIONS } from "@/types";
 
 export type AdminCampaignStatus = keyof typeof CAMPAIGN_STATUS_TRANSITIONS;
@@ -49,5 +51,25 @@ export async function setCampaignStatus(
     });
 
     return { campaign: campaign.toObject(), changed: true };
+  });
+}
+
+type Ctx = { params: Promise<{ id: string }> };
+
+// The approve / reject / suspend routes differ only in target status and
+// notification wording — this factory is their entire handler.
+export function makeCampaignStatusRoute(
+  status: AdminCampaignStatus,
+  creatorMessage: (title: string) => string
+) {
+  return withAuthErrors<Ctx>(async (req, { params }) => {
+    await requireAdmin(req);
+    const id = parseObjectId((await params).id);
+    const { campaign, changed } = await setCampaignStatus(
+      id,
+      status,
+      creatorMessage
+    );
+    return Response.json({ campaign, changed });
   });
 }
