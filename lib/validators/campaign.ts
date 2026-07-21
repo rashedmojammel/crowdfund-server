@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationSchema } from "@/lib/validators/common";
 import { CAMPAIGN_CATEGORIES } from "@/types";
 
 export { CAMPAIGN_CATEGORIES };
@@ -30,11 +31,9 @@ export const updateCampaignSchema = z
     "At least one field is required"
   );
 
-// Query-param filters for the public list. Coerced because query params
-// arrive as strings; not strict because pagination shares the query string.
-export const listCampaignsQuerySchema = z.object({
+// Query-param filters for the public list, on top of shared pagination.
+export const listCampaignsQuerySchema = paginationSchema.extend({
   category: z.enum(CAMPAIGN_CATEGORIES).optional(),
-  page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(12),
 });
 

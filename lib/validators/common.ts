@@ -10,3 +10,15 @@ export const objectIdSchema = z
 export function parseObjectId(value: string): string {
   return objectIdSchema.parse(value);
 }
+
+// Parsed from query params, so values arrive as strings — coerce them.
+// Not strict: pagination coexists with other filters in the query string.
+export const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+// z.coerce.boolean() would turn "false" into true — parse explicitly.
+export const queryFlagSchema = z
+  .enum(["true", "false"])
+  .transform((value) => value === "true");
