@@ -1,6 +1,7 @@
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { Campaign, type CampaignDoc } from "@/lib/models/Campaign";
+import { createNotification } from "@/lib/notifications";
 import { CAMPAIGN_STATUS_TRANSITIONS } from "@/types";
 
 export type AdminCampaignStatus = keyof typeof CAMPAIGN_STATUS_TRANSITIONS;
@@ -16,7 +17,8 @@ export interface StatusChangeResult {
 // (e.g. approving a rejected campaign) is a 409.
 export async function setCampaignStatus(
   id: string,
-  status: AdminCampaignStatus
+  status: AdminCampaignStatus,
+  creatorMessage: (title: string) => string
 ): Promise<StatusChangeResult> {
   await connectDb();
 
@@ -37,6 +39,14 @@ export async function setCampaignStatus(
 
     campaign.status = status;
     await campaign.save({ session });
+
+    // Only on a real change — an idempotent replay must not re-notify.
+    await createNotification({
+      toEmail: campaign.creatorEmail,
+      message: creatorMessage(campaign.title),
+      actionRoute: "/dashboard/my-campaigns",
+      session,
+    });
 
     return { campaign: campaign.toObject(), changed: true };
   });
