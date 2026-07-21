@@ -4,6 +4,7 @@ import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
 import { Campaign } from "@/lib/models/Campaign";
+import { createNotification } from "@/lib/notifications";
 import { updateCampaignSchema } from "@/lib/validators/campaign";
 import { parseObjectId } from "@/lib/validators/common";
 
@@ -70,6 +71,17 @@ export const DELETE = withAuthErrors<Ctx>(async (req, { params }) => {
       session
     );
     await Campaign.deleteOne({ _id: id }, { session });
+
+    // An admin deleting someone else's campaign is a state change affecting
+    // the creator — notify them, inside the same transaction.
+    if (user.role === "admin" && campaign.creatorEmail !== user.email) {
+      await createNotification({
+        toEmail: campaign.creatorEmail,
+        message: `Your campaign "${campaign.title}" was removed by an admin.`,
+        actionRoute: "/dashboard/my-campaigns",
+        session,
+      });
+    }
     return result;
   });
 
