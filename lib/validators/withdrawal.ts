@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { paginationSchema, queryFlagSchema } from "@/lib/validators/common";
 import { MIN_WITHDRAWAL_CREDITS, PAYMENT_SYSTEMS } from "@/types";
 
 export { PAYMENT_SYSTEMS };
 
-// The requesting creator comes from the verified JWT. Credits are converted
-// at 20 credits = $1 on the server side; the body only carries the amount.
+// creatorEmail comes from the JWT and USD amount is computed server-side
+// (credits / 20) — the body only ever carries credits, never a dollar figure.
 export const createWithdrawalSchema = z.strictObject({
   credits: z
     .number()
@@ -17,4 +18,11 @@ export const createWithdrawalSchema = z.strictObject({
   accountNumber: z.string().trim().min(4).max(40),
 });
 
+// ?mine=true (creator's own history) with pagination. Default (no mine)
+// is the admin-only pending list.
+export const listWithdrawalsQuerySchema = paginationSchema.extend({
+  mine: queryFlagSchema.optional(),
+});
+
 export type CreateWithdrawalInput = z.infer<typeof createWithdrawalSchema>;
+export type ListWithdrawalsQuery = z.infer<typeof listWithdrawalsQuerySchema>;
