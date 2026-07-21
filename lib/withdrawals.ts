@@ -1,16 +1,7 @@
 import type { ClientSession } from "mongoose";
-import { Campaign } from "@/lib/models/Campaign";
+import { getCreatorCampaignIds } from "@/lib/campaigns";
 import { Contribution } from "@/lib/models/Contribution";
 import { Withdrawal } from "@/lib/models/Withdrawal";
-
-export async function getCreatorCampaignIds(
-  creatorEmail: string,
-  session?: ClientSession
-) {
-  return Campaign.find({ creatorEmail })
-    .session(session ?? null)
-    .distinct("_id");
-}
 
 // Available = sum of approved contributions to this creator's campaigns
 // minus sum of credits already tied up in pending or paid withdrawals.

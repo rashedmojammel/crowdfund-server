@@ -4,9 +4,9 @@ import { deductCredits } from "@/lib/credits";
 import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
-import { Campaign } from "@/lib/models/Campaign";
 import { Contribution } from "@/lib/models/Contribution";
 import { User } from "@/lib/models/User";
+import { getCreatorCampaignIds } from "@/lib/campaigns";
 import { createNotification } from "@/lib/notifications";
 import {
   createContributionSchema,
@@ -46,9 +46,7 @@ export const GET = withAuthErrors(async (req) => {
     if (user.role !== "creator") {
       throw new ApiError(403, "Forbidden for your role");
     }
-    const campaignIds = await Campaign.find({
-      creatorEmail: user.email,
-    }).distinct("_id");
+    const campaignIds = await getCreatorCampaignIds(user.email);
     const items = await Contribution.find({
       campaignId: { $in: campaignIds },
     })

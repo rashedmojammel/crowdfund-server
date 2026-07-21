@@ -54,6 +54,15 @@ export async function setCampaignStatus(
   });
 }
 
+export async function getCreatorCampaignIds(
+  creatorEmail: string,
+  session?: import("mongoose").ClientSession
+) {
+  return Campaign.find({ creatorEmail })
+    .session(session ?? null)
+    .distinct("_id");
+}
+
 // Guards for POST /api/contributions: campaign must exist, be approved,
 // be inside its deadline, and the amount must meet its minimum. Returns
 // the campaign so the caller doesn't query twice.
