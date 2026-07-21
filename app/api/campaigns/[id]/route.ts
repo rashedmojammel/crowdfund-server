@@ -1,5 +1,6 @@
 import { requireCreator, verifyRequest, withAuthErrors } from "@/lib/auth";
-import { connectDb } from "@/lib/db";
+import { refundApprovedContributions } from "@/lib/contributions";
+import { connectDb, runInTransaction } from "@/lib/db";
 import { ApiError } from "@/lib/errors";
 import { readJsonBody } from "@/lib/http";
 import { Campaign } from "@/lib/models/Campaign";
@@ -43,4 +44,34 @@ export const PATCH = withAuthErrors<Ctx>(async (req, { params }) => {
   }
 
   return Response.json({ campaign });
+});
+
+// DELETE — the campaign's creator or an admin. Refunds, audit-trail status
+// updates, the delete itself, and all notifications commit or roll back as
+// one transaction.
+export const DELETE = withAuthErrors<Ctx>(async (req, { params }) => {
+  const user = await verifyRequest(req);
+  if (user.role !== "creator" && user.role !== "admin") {
+    throw new ApiError(403, "Forbidden for your role");
+  }
+  const id = parseObjectId((await params).id);
+  await connectDb();
+
+  const campaign = await Campaign.findById(id).lean();
+  if (!campaign) throw new ApiError(404, "Campaign not found");
+  if (user.role === "creator" && campaign.creatorEmail !== user.email) {
+    throw new ApiError(403, "You can only delete your own campaigns");
+  }
+
+  const refunds = await runInTransaction(async (session) => {
+    const result = await refundApprovedContributions(
+      id,
+      campaign.title,
+      session
+    );
+    await Campaign.deleteOne({ _id: id }, { session });
+    return result;
+  });
+
+  return Response.json({ deleted: true, ...refunds });
 });
