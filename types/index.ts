@@ -42,6 +42,12 @@ export const CONTRIBUTION_STATUSES = [
 ] as const;
 export type ContributionStatus = (typeof CONTRIBUTION_STATUSES)[number];
 
+export const WITHDRAWAL_STATUSES = ["pending", "paid"] as const;
+export type WithdrawalStatus = (typeof WITHDRAWAL_STATUSES)[number];
+
+export const PAYMENT_SYSTEMS = ["bkash", "nagad", "rocket", "bank"] as const;
+export type PaymentSystem = (typeof PAYMENT_SYSTEMS)[number];
+
 // Credit rates: 10 credits = $1 when buying, 20 credits = $1 when withdrawing.
 export const CREDITS_PER_USD_BUY = 10;
 export const CREDITS_PER_USD_WITHDRAW = 20;
