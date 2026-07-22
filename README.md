@@ -161,18 +161,54 @@ instead of `items`).
 |---|---|---|
 | GET | `/api/health` | public — DB connectivity check |
 
-## Project structure
+## Folder structure & how it's maintained
 
 ```
-app/api/           Route handlers only — no business logic
-lib/                Shared logic
-  auth.ts           JWT verification, role guards, withAuthErrors
-  credits.ts        $inc-only credit mutation helpers
-  db.ts             Mongoose connection + transaction helper
-  models/           Mongoose schemas
-  validators/       Zod schemas per resource
-  notifications.ts, campaigns.ts, contributions.ts, withdrawals.ts,
-  users.ts, reports.ts, stripe.ts, pagination.ts
-types/              Shared enums and constants
-scripts/            Manual test tooling
+app/api/            Route handlers only — thin: auth check, parse, call lib/, respond
+lib/
+  auth.ts            JWT verification, role guards (requireSupporter/Creator/Admin), withAuthErrors
+  errors.ts          ApiError — the only way a route/lib function reports a failure
+  db.ts              Mongoose connection + runInTransaction() helper
+  credits.ts         $inc-only credit mutation helpers — the ONLY way User.credits changes
+  pagination.ts       Shared paginate() — every list endpoint uses this, same {items,total,page,limit} shape
+  http.ts            readJsonBody() — turns bad JSON into a clean 400 instead of a crash
+  models/            One Mongoose schema per collection
+  validators/        One Zod schema file per resource — the single source of truth for valid shapes
+  campaigns.ts, contributions.ts, withdrawals.ts, users.ts,
+  reports.ts, notifications.ts, stripe.ts
+                     Business logic, one file per resource. Anything that touches the
+                     DB more than once, or moves credits, lives here — never inline in a route.
+types/               Shared enums/constants (roles, statuses, credit packages) — the
+                     definition every model enum and Zod schema pulls from
+scripts/             Manual test tooling (smoke-test.sh)
 ```
+
+**Where a change goes** — this order almost never varies:
+1. `types/index.ts` — new enum value or constant, if any.
+2. `lib/models/*.ts` — new/changed field on the schema.
+3. `lib/validators/*.ts` — the Zod schema is updated *first*, before any route touches the new shape. `z.strictObject` for bodies, `z.coerce.number()` for query params.
+4. `lib/<resource>.ts` — the actual logic. Credit-moving operations go inside `runInTransaction()`; credit mutations call the `lib/credits.ts` helpers, never `$inc` inline; state changes that affect another user end with a `createNotification()` call inside the same transaction.
+5. `app/api/.../route.ts` — wraps the above in `withAuthErrors(async (req) => { ... })`. If the route body is longer than "auth → parse → call one lib function → respond", the logic almost certainly belongs in step 4 instead.
+6. This README's API table, if the endpoint's shape or access rules are new — and `CLAUDE.md` if a new *global* rule was established (not just one endpoint's behavior).
+
+Route handlers deliberately hold no business logic so that `lib/*.ts` functions can be reused across routes (e.g. `deleteCampaignWithRefunds` is called from both `DELETE /api/campaigns/[id]` and the admin report action) without duplicating the transaction.
+
+## Troubleshooting — how errors get diagnosed here
+
+Every error response is `{ message: string }` (validation errors also include `issues`). The status code tells you where to look before you go hunting:
+
+| Status | Means | Where to look |
+|---|---|---|
+| 401 | Missing/invalid/expired JWT | `lib/auth.ts` `verifyRequest` is the only thing that throws this. Check the `Authorization: Bearer <jwt>` header is present, and that `BETTER_AUTH_SECRET` is identical in both repos' `.env.local`. |
+| 403 | Wrong role, or right role but not the owner | A `requireX` role gate, or an explicit ownership check (e.g. `campaign.creatorEmail !== jwt.email`) in the route or `lib/` function. Not a bug by itself — confirm the JWT's role/identity is what you expect. |
+| 400 | Zod validation failed | Read the `issues` array in the response body — it names the exact field and rule that failed. The schema is in `lib/validators/<resource>.ts`; fix the request, not the server, unless the schema itself is wrong. |
+| 404 | Not found — or deliberately hidden | Real "doesn't exist," **or** a non-approved campaign being hidden from a non-owner/non-admin on purpose (see `CLAUDE.md`: "never leak existence"). If a resource you just created 404s, check its `status` field before assuming a bug. |
+| 409 | Business-rule conflict | Intentional `ApiError(409, ...)` — insufficient credits, invalid status transition, a contribution already decided, withdrawal exceeds available balance, etc. The message says exactly which rule fired. |
+| 500 | Something actually broke | `withAuthErrors` logs `Unhandled route error: <stack>` to the terminal running `npm run dev` *before* sending the generic body — the client-visible message is intentionally vague, so the real cause is always in that terminal, not the response. |
+
+General workflow when something looks broken:
+1. Reproduce it as a single `curl` call (or a line in `scripts/smoke-test.sh`) to isolate client vs. server before touching any code.
+2. Check the server terminal for the logged stack trace — most "it just doesn't work" reports are a 500 with the real reason sitting right there.
+3. Run `npm run typecheck` — shape mismatches between a route and its caller usually show up here before they'd ever hit runtime.
+4. For anything credit-related, inspect the DB directly (`User.credits`, `Contribution.status`, `Campaign.amountRaised`) — since credits only ever move via `$inc` inside a transaction, the DB state tells you precisely which step did or didn't run.
+5. Confirm env vars first if the failure is total (nothing works): `MONGODB_URI` unreachable and a mismatched `BETTER_AUTH_SECRET` between the two repos are the two most common "everything is broken" causes.
