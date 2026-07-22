@@ -1,4 +1,4 @@
-import type { FilterQuery, Model, SortOrder } from "mongoose";
+import type { FilterQuery, Model, ProjectionType, SortOrder } from "mongoose";
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -14,13 +14,14 @@ export async function paginate<T>(
   filter: FilterQuery<T>,
   sort: Record<string, SortOrder>,
   page: number,
-  limit: number
+  limit: number,
+  projection?: ProjectionType<T>
 ): Promise<PaginatedResult<T>> {
   const stableSort = "_id" in sort ? sort : { ...sort, _id: 1 as SortOrder };
 
   const [items, total] = await Promise.all([
     model
-      .find(filter)
+      .find(filter, projection)
       .sort(stableSort)
       .skip((page - 1) * limit)
       .limit(limit)
