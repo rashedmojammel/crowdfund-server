@@ -55,6 +55,27 @@ export async function refundCredits(
   return user;
 }
 
+// Same $inc as refundCredits, kept separate so callers read correctly —
+// this is a Stripe payment landing, not a refund. Used by the payments
+// webhook once a Checkout Session actually completes.
+export async function creditWallet(
+  email: string,
+  amount: number,
+  session?: ClientSession
+): Promise<UserDoc> {
+  assertValidAmount(amount);
+  await connectDb();
+
+  const user = await User.findOneAndUpdate(
+    { email },
+    { $inc: { credits: amount } },
+    { new: true, session }
+  );
+
+  if (!user) throw new ApiError(404, "User not found");
+  return user;
+}
+
 export interface SignupBonusResult {
   granted: boolean;
   bonus: number;
