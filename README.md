@@ -69,6 +69,40 @@ npm run dev                  # http://localhost:4000
 | `npm run start` | Start the production server on port 4000. |
 | `npm run typecheck` | `tsc --noEmit`. |
 
+## Deploying to Vercel
+
+This is a stock Next.js App Router project — no `vercel.json` or build
+overrides needed. Vercel auto-detects the framework, runs `next build`, and
+ignores the `-p 4000` in `npm start` (it assigns its own port). The Mongo
+connection in `lib/db.ts` caches on `globalThis`, which is the correct
+pattern for serverless — safe as-is.
+
+### Env vars to set in the Vercel dashboard
+
+Project → Settings → Environment Variables. Same five as `.env.example`,
+with production-specific values:
+
+| Variable | Production value |
+|---|---|
+| `MONGODB_URI` | Same Atlas (or hosted) cluster the deployed client uses — not your local dev DB. |
+| `BETTER_AUTH_SECRET` | Must be byte-for-byte identical to the value set in the client repo's Vercel project. |
+| `STRIPE_SECRET_KEY` | Use the **live** key (`sk_live_...`) once you're off test mode — a test key against live Checkout Sessions will fail. |
+| `STRIPE_WEBHOOK_SECRET` | The signing secret from the *production* webhook endpoint (see below) — this is different from the one `stripe listen` gives you locally. |
+| `ALLOWED_ORIGINS` | The deployed client's real origin, e.g. `https://your-client.vercel.app` (comma-separate if there's more than one, no trailing slash). |
+
+Set them for the **Production** environment at minimum; add a separate set
+scoped to **Preview** if preview deployments need to hit a staging DB/client
+instead of production ones.
+
+### After deploying: health check
+
+Hit `GET https://<your-deployment>.vercel.app/api/health` first, before
+testing anything else. `{ ok: true, db: "connected" }` confirms the deployed
+function can actually reach `MONGODB_URI` — if `MONGODB_URI` is wrong or the
+Atlas IP allowlist doesn't include `0.0.0.0/0` (required for Vercel's
+serverless IPs), this is where it'll surface, as `{ ok: false, db:
+"disconnected" }` / 503, not as a confusing failure somewhere in the UI.
+
 ### Manual API smoke test
 
 `scripts/smoke-test.sh` exercises the auth matrix, validation, response
@@ -96,6 +130,7 @@ instead of `items`).
 | GET | `/api/campaigns` | public — approved, in-deadline campaigns |
 | POST | `/api/campaigns` | creator |
 | GET | `/api/campaigns/mine` | creator — own campaigns, all statuses |
+| GET | `/api/campaigns/all` | admin — every campaign, any status, unpaginated |
 | GET | `/api/campaigns/top-funded` | public — top 6 by amount raised |
 | GET | `/api/campaigns/[id]` | authenticated — 404 if not approved and not yours/admin |
 | PATCH | `/api/campaigns/[id]` | creator, own campaign only |
