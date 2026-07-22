@@ -5,9 +5,12 @@ const paymentSchema = new Schema(
     supporterEmail: { type: String, required: true, index: true },
     credits: { type: Number, required: true },
     amountUsd: { type: Number, required: true },
-    // Set when the checkout session is created; the webhook route uses it
-    // as the idempotency key when crediting the wallet.
-    stripeSessionId: { type: String, required: true, unique: true },
+    // Set once Stripe returns the created session (the Payment row itself
+    // is created first, so its _id can be used as the Checkout Session
+    // idempotency key); the webhook route then uses this field as its own
+    // idempotency key when crediting the wallet. sparse so the brief window
+    // before it's set doesn't collide on the unique index.
+    stripeSessionId: { type: String, unique: true, sparse: true },
     // Set by the webhook once checkout.session.completed fires.
     stripePaymentIntent: { type: String },
     status: {

@@ -43,33 +43,42 @@ export const POST = withAuthErrors(async (req) => {
   const clientUrl = getClientUrl();
   const stripe = getStripe();
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: { name: `${credits} Credits` },
-          unit_amount: Math.round(amountUsd * 100),
-        },
-        quantity: 1,
-      },
-    ],
-    // Identity and the validated package, never a client-suppliable amount —
-    // this is what the webhook trusts when it credits the wallet.
-    metadata: { supporterEmail: email, credits: String(credits) },
-    success_url: `${clientUrl}/dashboard/purchase-credit/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${clientUrl}/dashboard/purchase-credit/cancel`,
-  });
-
-  await Payment.create({
+  // Created before the Stripe call so its _id can serve as the Checkout
+  // Session idempotency key — a client retry (or stripe-node's own
+  // automatic retry on a network blip) reuses the same key and Stripe
+  // returns the original session instead of creating a duplicate one.
+  const payment = await Payment.create({
     supporterEmail: email,
     credits,
     amountUsd,
-    stripeSessionId: session.id,
     status: "pending",
   });
+
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: `${credits} Credits` },
+            unit_amount: Math.round(amountUsd * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      // Identity and the validated package, never a client-suppliable amount —
+      // this is what the webhook trusts when it credits the wallet.
+      metadata: { supporterEmail: email, credits: String(credits) },
+      success_url: `${clientUrl}/dashboard/purchase-credit/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${clientUrl}/dashboard/purchase-credit/cancel`,
+    },
+    { idempotencyKey: payment._id.toString() }
+  );
+
+  payment.stripeSessionId = session.id;
+  await payment.save();
 
   return Response.json({ url: session.url }, { status: 201 });
 });
