@@ -38,20 +38,27 @@ export const GET = withAuthErrors(async (req) => {
     });
   }
 
-  // ?forCreator=true — contributions to the creator's OWN campaigns. The
-  // campaign scope comes from the JWT email; there is no way to pass a
-  // creator email in.
+  // ?forCreator=true — contributions to the creator's OWN campaigns,
+  // paginated. The campaign scope comes from the JWT email; there is no way
+  // to pass a creator email in.
   if (query.forCreator) {
     if (user.role !== "creator") {
       throw new ApiError(403, "Forbidden for your role");
     }
     const campaignIds = await getCreatorCampaignIds(user.email);
-    const items = await Contribution.find({
-      campaignId: { $in: campaignIds },
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-    return Response.json({ items });
+    const { items, total } = await paginate<ContributionDoc>(
+      Contribution,
+      { campaignId: { $in: campaignIds } },
+      { createdAt: -1 },
+      query.page,
+      query.limit
+    );
+    return Response.json({
+      items,
+      total,
+      page: query.page,
+      limit: query.limit,
+    });
   }
 
   throw new ApiError(400, "Specify ?mine=true or ?forCreator=true");
